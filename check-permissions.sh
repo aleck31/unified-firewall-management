@@ -68,10 +68,16 @@ check_permission "Route53 Resolver" \
     "aws route53resolver list-firewall-rule-groups" \
     "需要 route53resolver:ListFirewallRuleGroups 权限"
 
-# 9. 检查 RAM 权限
-check_permission "Resource Access Manager" \
-    "aws ram get-resource-shares" \
-    "需要 ram:GetResourceShares 权限"
+# 9. 检查 RAM 权限（可选，某些区域可能不可用）
+echo -n "检查 Resource Access Manager 权限..."
+if aws ram get-resource-shares >/dev/null 2>&1; then
+    echo " ✅ 通过"
+    ((PASSED++))
+else
+    echo " ⚠️  可选 - RAM 服务可能在当前区域不可用或需要先启用"
+    echo "   注意：部署脚本会自动启用 RAM 组织共享"
+    # 不计入失败，因为这是可选的
+fi
 
 # 10. 检查 IAM 服务角色权限
 check_permission "IAM 服务角色" \

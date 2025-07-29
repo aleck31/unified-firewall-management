@@ -1,26 +1,14 @@
 {
   "PolicyName": "OrgWideDNSFirewallPolicy",
-  "SecurityServiceType": "DNS_FIREWALL",
+  "SecurityServicePolicyData": {
+    "Type": "DNS_FIREWALL",
+    "ManagedServiceData": "{\"type\":\"DNS_FIREWALL\",\"preProcessRuleGroups\":[{\"ruleGroupId\":\"rslvr-frg-xxxxxxxxxx\",\"priority\":100}],\"postProcessRuleGroups\":[]}"
+  },
   "ResourceType": "AWS::EC2::VPC",
   "IncludeMap": {
     "OU": ["ou-root-xxxxxxxxxx"]
   },
   "ExcludeResourceTags": false,
   "RemediationEnabled": true,
-  "DeleteUnusedFMManagedResources": false,
-  "SecurityServicePolicyData": {
-    "Type": "DNS_FIREWALL",
-    "ManagedServiceData": "{\"type\":\"DNS_FIREWALL\",\"preProcessRuleGroups\":[{\"ruleGroupId\":\"rslvr-frg-xxxxxxxxxx\",\"priority\":100}],\"postProcessRuleGroups\":[]}"
-  },
-  "ResourceTypeList": ["AWS::EC2::VPC"],
-  "Tags": [
-    {
-      "Key": "ManagedBy",
-      "Value": "FirewallManager"
-    },
-    {
-      "Key": "PolicyType",
-      "Value": "DNSFirewall"
-    }
-  ]
+  "DeleteUnusedFMManagedResources": false
 }

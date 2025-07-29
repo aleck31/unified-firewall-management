@@ -114,7 +114,7 @@ aws network-firewall create-rule-group \
 # 创建域名列表
 aws route53resolver create-firewall-domain-list \
   --name "BlockedDomainsList" \
-  --domains "malware.example.com" "phishing.example.com" "suspicious.example.com"
+  --domains "example.com" "badsite.org" "www.wicar.org"
 
 # 获取域名列表ID
 DOMAIN_LIST_ID=$(aws route53resolver list-firewall-domain-lists \
@@ -161,8 +161,8 @@ STATEFUL_ARN=$(aws network-firewall describe-rule-group \
 
 # 更新配置文件中的占位符
 sed -i "s|ou-root-xxxxxxxxxx|$ROOT_OU_ID|g" firewall-manager-configs/*.json
-sed -i "s|arn:aws:network-firewall:us-east-1:123456789012:stateless-rulegroup/OrgWideStatelessRules|$STATELESS_ARN|g" firewall-manager-configs/network-firewall-policy.json
-sed -i "s|arn:aws:network-firewall:us-east-1:123456789012:stateful-rulegroup/OrgWideStatefulRules|$STATEFUL_ARN|g" firewall-manager-configs/network-firewall-policy.json
+sed -i "s|arn:aws:network-firewall:ap-northeast-1:123456789012:stateless-rulegroup/OrgWideStatelessRules|$STATELESS_ARN|g" firewall-manager-configs/network-firewall-policy.json
+sed -i "s|arn:aws:network-firewall:ap-northeast-1:123456789012:stateful-rulegroup/OrgWideStatefulRules|$STATEFUL_ARN|g" firewall-manager-configs/network-firewall-policy.json
 sed -i "s|rslvr-frg-xxxxxxxxxx|$RULE_GROUP_ID|g" firewall-manager-configs/dns-firewall-policy.json
 ```
 
@@ -172,32 +172,17 @@ sed -i "s|rslvr-frg-xxxxxxxxxx|$RULE_GROUP_ID|g" firewall-manager-configs/dns-fi
 ```json
 {
   "PolicyName": "OrgWideNetworkFirewallPolicy",
-  "SecurityServiceType": "NETWORK_FIREWALL",
+  "SecurityServicePolicyData": {
+    "Type": "NETWORK_FIREWALL",
+    "ManagedServiceData": "{\"type\":\"NETWORK_FIREWALL\",\"networkFirewallStatelessRuleGroupReferences\":[{\"resourceArn\":\"arn:aws:network-firewall:ap-northeast-1:account:stateless-rulegroup/OrgWideStatelessRules\",\"priority\":100}],\"networkFirewallStatefulRuleGroupReferences\":[{\"resourceArn\":\"arn:aws:network-firewall:ap-northeast-1:account:stateful-rulegroup/OrgWideStatefulRules\"}],\"networkFirewallStatelessDefaultActions\":[\"aws:forward_to_sfe\"],\"networkFirewallStatelessFragmentDefaultActions\":[\"aws:forward_to_sfe\"],\"networkFirewallOrchestrationConfig\":{\"singleFirewallEndpointPerVPC\":false,\"allowedIPV4CidrList\":[\"0.0.0.0/0\"]}}"
+  },
   "ResourceType": "AWS::EC2::VPC",
   "IncludeMap": {
     "OU": ["ou-root-xxxxxxxxxx"]
   },
   "ExcludeResourceTags": false,
   "RemediationEnabled": true,
-  "DeleteUnusedFMManagedResources": false,
-  "SecurityServicePolicyData": {
-    "Type": "NETWORK_FIREWALL",
-    "NetworkFirewallPolicy": {
-      "StatelessDefaultActions": ["aws:forward_to_sfe"],
-      "StatelessFragmentDefaultActions": ["aws:forward_to_sfe"],
-      "StatelessRuleGroupReferences": [
-        {
-          "ResourceArn": "arn:aws:network-firewall:region:account:stateless-rulegroup/OrgWideStatelessRules",
-          "Priority": 100
-        }
-      ],
-      "StatefulRuleGroupReferences": [
-        {
-          "ResourceArn": "arn:aws:network-firewall:region:account:stateful-rulegroup/OrgWideStatefulRules"
-        }
-      ]
-    }
-  }
+  "DeleteUnusedFMManagedResources": false
 }
 ```
 
@@ -205,26 +190,17 @@ sed -i "s|rslvr-frg-xxxxxxxxxx|$RULE_GROUP_ID|g" firewall-manager-configs/dns-fi
 ```json
 {
   "PolicyName": "OrgWideDNSFirewallPolicy",
-  "SecurityServiceType": "DNS_FIREWALL",
+  "SecurityServicePolicyData": {
+    "Type": "DNS_FIREWALL",
+    "ManagedServiceData": "{\"type\":\"DNS_FIREWALL\",\"preProcessRuleGroups\":[{\"ruleGroupId\":\"<DNS_RULE_GROUP_ID>\",\"priority\":100}],\"postProcessRuleGroups\":[]}"
+  },
   "ResourceType": "AWS::EC2::VPC",
   "IncludeMap": {
     "OU": ["ou-root-xxxxxxxxxx"]
   },
   "ExcludeResourceTags": false,
   "RemediationEnabled": true,
-  "SecurityServicePolicyData": {
-    "Type": "DNS_FIREWALL",
-    "ManagedServiceData": {
-      "type": "DNS_FIREWALL",
-      "preProcessRuleGroups": [
-        {
-          "ruleGroupId": "<DNS_RULE_GROUP_ID>",
-          "priority": 100
-        }
-      ],
-      "postProcessRuleGroups": []
-    }
-  }
+  "DeleteUnusedFMManagedResources": false
 }
 ```
 
@@ -531,19 +507,34 @@ aws fms put-policy --policy file://updated-policy.json
 
 ## 自动化脚本
 
-### 一键部署脚本
-使用提供的 `deploy-firewall-manager.sh` 脚本可以自动化执行大部分部署步骤：
+### 分步部署脚本
+本方案提供两个独立的部署脚本，支持分步部署：
 
+#### 步骤1：部署 Firewall Manager
 ```bash
 # 设置环境变量
-export ADMIN_ACCOUNT_ID="123456789012"
-export ROOT_OU_ID="ou-root-xxxxxxxxxx" 
-export REGION="us-east-1"
+export REGION="ap-northeast-1"  # 替换为你的区域
 
-# 执行部署脚本
-chmod +x deploy-firewall-manager.sh
-./deploy-firewall-manager.sh
+# 执行 Firewall Manager 部署
+chmod +x deploy-1-firewall-manager.sh
+./deploy-1-firewall-manager.sh
 ```
+
+#### 步骤2：部署 SCP 保护策略
+```bash
+# 执行 SCP 策略部署
+chmod +x deploy-2-scp-protect.sh
+./deploy-2-scp-protect.sh
+```
+
+### 脚本功能说明
+- **`deploy-1-firewall-manager.sh`**：自动化执行阶段一到阶段三的所有步骤
+- **`deploy-2-scp-protect.sh`**：自动化执行阶段四的 SCP 策略部署
+
+### 部署顺序建议
+1. **先部署 Firewall Manager**：确保防火墙策略正常工作
+2. **验证功能**：测试防火墙策略是否按预期工作
+3. **再部署 SCP**：添加权限保护，防止未授权修改
 
 ## 总结
 

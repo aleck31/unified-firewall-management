@@ -1,41 +1,14 @@
 {
   "PolicyName": "OrgWideNetworkFirewallPolicy",
-  "SecurityServiceType": "NETWORK_FIREWALL",
+  "SecurityServicePolicyData": {
+    "Type": "NETWORK_FIREWALL",
+    "ManagedServiceData": "{\"type\":\"NETWORK_FIREWALL\",\"networkFirewallStatelessRuleGroupReferences\":[{\"resourceArn\":\"arn:aws:network-firewall:ap-northeast-1:123456789012:stateless-rulegroup/OrgWideStatelessRules\",\"priority\":100}],\"networkFirewallStatefulRuleGroupReferences\":[{\"resourceArn\":\"arn:aws:network-firewall:ap-northeast-1:123456789012:stateful-rulegroup/OrgWideStatefulRules\"}],\"networkFirewallStatelessDefaultActions\":[\"aws:forward_to_sfe\"],\"networkFirewallStatelessFragmentDefaultActions\":[\"aws:forward_to_sfe\"],\"networkFirewallOrchestrationConfig\":{\"singleFirewallEndpointPerVPC\":false,\"allowedIPV4CidrList\":[\"0.0.0.0/0\"]}}"
+  },
   "ResourceType": "AWS::EC2::VPC",
   "IncludeMap": {
     "OU": ["ou-root-xxxxxxxxxx"]
   },
   "ExcludeResourceTags": false,
   "RemediationEnabled": true,
-  "DeleteUnusedFMManagedResources": false,
-  "SecurityServicePolicyData": {
-    "Type": "NETWORK_FIREWALL",
-    "NetworkFirewallPolicy": {
-      "StatelessDefaultActions": ["aws:forward_to_sfe"],
-      "StatelessFragmentDefaultActions": ["aws:forward_to_sfe"],
-      "StatelessRuleGroupReferences": [
-        {
-          "ResourceArn": "arn:aws:network-firewall:us-east-1:123456789012:stateless-rulegroup/OrgWideStatelessRules",
-          "Priority": 100
-        }
-      ],
-      "StatefulRuleGroupReferences": [
-        {
-          "ResourceArn": "arn:aws:network-firewall:us-east-1:123456789012:stateful-rulegroup/OrgWideStatefulRules"
-        }
-      ],
-      "FirewallDeploymentModel": "DISTRIBUTED"
-    }
-  },
-  "ResourceTypeList": ["AWS::EC2::VPC"],
-  "Tags": [
-    {
-      "Key": "ManagedBy",
-      "Value": "FirewallManager"
-    },
-    {
-      "Key": "PolicyType", 
-      "Value": "NetworkFirewall"
-    }
-  ]
+  "DeleteUnusedFMManagedResources": false
 }

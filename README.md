@@ -20,19 +20,25 @@
 ```
 
 ### 2. 配置参数
-编辑 `deploy-firewall-manager.sh` 脚本，修改以下参数：
+编辑部署脚本，修改以下参数：
 
 ```bash
 # 配置变量 - 请根据实际环境修改
-REGION="us-east-1"               # 替换为你的区域
+REGION="ap-northeast-1"               # 替换为你的区域
 ```
 
 > 📝 **注意**：脚本会自动获取账户ID和根OU ID，无需手动配置
 
-### 3. 一键部署
+### 3. 分步部署脚本
+
 ```bash
-chmod +x deploy-firewall-manager.sh
-./deploy-firewall-manager.sh
+# 步骤1：部署 Firewall Manager
+chmod +x deploy-1-firewall-manager.sh
+./deploy-1-firewall-manager.sh
+
+# 步骤2：部署 SCP 保护策略
+chmod +x deploy-2-scp-protect.sh
+./deploy-2-scp-protect.sh
 ```
 
 ### 4. 验证部署
@@ -56,7 +62,8 @@ chmod +x deploy-firewall-manager.sh
 
 ## 文档结构
 - `firewall-manager-deployment-guide.md` - 完整实施指南
-- `deploy-firewall-manager.sh` - 自动化部署脚本
+- `deploy-1-firewall-manager.sh` - 部署 Firewall Manager
+- `deploy-2-scp-protect.sh` - 部署 SCP 保护策略
 - `execution-permissions-guide.md` - 执行权限需求说明
 - `check-permissions.sh` - 权限检查脚本
 - `firewall-protection-scp.json` - SCP 策略文件
