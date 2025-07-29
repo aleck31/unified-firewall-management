@@ -8,10 +8,18 @@
 
 ### 前提条件
 - 已启用 AWS Organizations
-- 使用**根账号的 admin 用户**执行
+- 使用**根账号的 admin 用户**执行（推荐）
 - 具备必要的 IAM 权限
 
-### 1. 配置参数
+> 📋 **权限要求**：详细的执行权限说明请参考 `execution-permissions-guide.md`
+
+### 1. 权限检查（推荐）
+```bash
+# 执行权限检查脚本
+./check-permissions.sh
+```
+
+### 2. 配置参数
 编辑 `deploy-firewall-manager.sh` 脚本，修改以下参数：
 
 ```bash
@@ -21,13 +29,13 @@ REGION="us-east-1"               # 替换为你的区域
 
 > 📝 **注意**：脚本会自动获取账户ID和根OU ID，无需手动配置
 
-### 2. 一键部署
+### 3. 一键部署
 ```bash
 chmod +x deploy-firewall-manager.sh
 ./deploy-firewall-manager.sh
 ```
 
-### 3. 验证部署
+### 4. 验证部署
 - 检查 [Firewall Manager 控制台](https://console.aws.amazon.com/wafv2/fms)
 - 验证策略状态为 "ACTIVE"
 - 测试成员账户无法修改防火墙配置
@@ -49,6 +57,8 @@ chmod +x deploy-firewall-manager.sh
 ## 文档结构
 - `firewall-manager-deployment-guide.md` - 完整实施指南
 - `deploy-firewall-manager.sh` - 自动化部署脚本
+- `execution-permissions-guide.md` - 执行权限需求说明
+- `check-permissions.sh` - 权限检查脚本
 - `firewall-protection-scp.json` - SCP 策略文件
 - `firewall-manager-configs/` - Firewall Manager 策略配置
 
