@@ -56,86 +56,90 @@ aws fms get-admin-account
 
 ### 阶段二：创建防火墙规则组（根账号 admin 用户执行）
 
+> ⚠️ **重要说明**：根据 AWS 官方文档，Firewall Manager 无法直接定义规则组内容。规则组必须预先在 Firewall Manager 管理员账户中创建，然后在策略中引用这些已存在的规则组。Firewall Manager 会通过 AWS RAM 自动将这些规则组共享到成员账户，并在每个 VPC 中自动创建防火墙应用这些规则。
+
 #### 2.1 创建 Network Firewall 规则组
 
 ```bash
-# 创建无状态规则组配置文件
-cat > stateless-rules.json << 'EOF'
-{
-  "RulesSource": {
-    "StatelessRulesAndCustomActions": {
-      "StatelessRules": [
-        {
-          "RuleDefinition": {
-            "MatchAttributes": {
-              "Sources": [{"AddressDefinition": "0.0.0.0/0"}],
-              "Destinations": [{"AddressDefinition": "0.0.0.0/0"}],
-              "SourcePorts": [{"FromPort": 1, "ToPort": 65535}],
-              "DestinationPorts": [{"FromPort": 80, "ToPort": 80}],
-              "Protocols": [6]
-            },
-            "Actions": ["aws:forward_to_sfe"]
-          },
-          "Priority": 1
-        }
-      ]
-    }
-  }
-}
-EOF
-
 # 创建无状态规则组
 aws network-firewall create-rule-group \
   --rule-group-name "OrgWideStatelessRules" \
   --type STATELESS \
   --capacity 100 \
-  --rule-group file://stateless-rules.json
-
-# 创建有状态规则组配置文件
-cat > stateful-rules.json << 'EOF'
-{
-  "RulesSource": {
-    "RulesString": "drop tcp any any -> any 22 (msg:\"Block SSH from external\"; sid:1; rev:1;)\npass tcp any any -> any 443 (msg:\"Allow HTTPS\"; sid:2; rev:1;)"
-  }
-}
-EOF
+  --rule-group '{
+    "RulesSource": {
+      "StatelessRulesAndCustomActions": {
+        "StatelessRules": [
+          {
+            "RuleDefinition": {
+              "MatchAttributes": {
+                "Sources": [{"AddressDefinition": "0.0.0.0/0"}],
+                "Destinations": [{"AddressDefinition": "0.0.0.0/0"}],
+                "SourcePorts": [{"FromPort": 1, "ToPort": 65535}],
+                "DestinationPorts": [{"FromPort": 80, "ToPort": 80}],
+                "Protocols": [6]
+              },
+              "Actions": ["aws:forward_to_sfe"]
+            },
+            "Priority": 1
+          }
+        ]
+      }
+    }
+  }' \
+  --region $REGION
 
 # 创建有状态规则组
 aws network-firewall create-rule-group \
   --rule-group-name "OrgWideStatefulRules" \
   --type STATEFUL \
   --capacity 100 \
-  --rule-group file://stateful-rules.json
+  --rule-group '{
+    "RulesSource": {
+      "RulesString": "drop tcp any any -> any 22 (msg:\"Block SSH from external\"; sid:1; rev:1;)\npass tcp any any -> any 443 (msg:\"Allow HTTPS\"; sid:2; rev:1;)"
+    }
+  }' \
+  --region $REGION
 ```
 
 #### 2.2 创建 DNS Firewall 规则组
 
 ```bash
-# 创建域名列表
+# 创建空的域名列表
 aws route53resolver create-firewall-domain-list \
   --name "BlockedDomainsList" \
-  --domains "example.com" "badsite.org" "www.wicar.org"
+  --region $REGION
 
 # 获取域名列表ID
 DOMAIN_LIST_ID=$(aws route53resolver list-firewall-domain-lists \
+  --region $REGION \
   --query 'FirewallDomainLists[?Name==`BlockedDomainsList`].Id' \
   --output text)
+
+# 添加域名到列表
+aws route53resolver update-firewall-domains \
+  --firewall-domain-list-id "$DOMAIN_LIST_ID" \
+  --operation ADD \
+  --domains "badsite.org" "example.com" "www.wicar.org" \
+  --region $REGION
 
 # 创建 DNS 防火墙规则组
 RULE_GROUP_ID=$(aws route53resolver create-firewall-rule-group \
   --name "OrgWideDNSRules" \
   --creator-request-id $(uuidgen) \
+  --region $REGION \
   --query 'FirewallRuleGroup.Id' \
   --output text)
 
 # 添加阻止规则到规则组
 aws route53resolver create-firewall-rule \
   --creator-request-id $(uuidgen) \
-  --firewall-rule-group-id $RULE_GROUP_ID \
-  --firewall-domain-list-id $DOMAIN_LIST_ID \
+  --firewall-rule-group-id "$RULE_GROUP_ID" \
+  --firewall-domain-list-id "$DOMAIN_LIST_ID" \
   --priority 100 \
   --action BLOCK \
-  --name "BlockMalwareDomains"
+  --name "BlockMalwareDomains" \
+  --region $REGION
 
 echo "DNS 规则组 ID: $RULE_GROUP_ID"
 ```
@@ -528,13 +532,37 @@ chmod +x deploy-2-scp-protect.sh
 ```
 
 ### 脚本功能说明
-- **`deploy-1-firewall-manager.sh`**：自动化执行阶段一到阶段三的所有步骤
-- **`deploy-2-scp-protect.sh`**：自动化执行阶段四的 SCP 策略部署
+
+#### `deploy-1-firewall-manager.sh` 执行的步骤：
+1. **环境验证**：检查 AWS Organizations 和权限
+2. **启用资源共享**：启用 AWS RAM 组织级资源共享
+3. **设置管理员账户**：配置 Firewall Manager 管理员账户
+4. **创建 Network Firewall 规则组**：
+   - 使用直接 JSON 格式创建无状态和有状态规则组
+   - 无需创建临时文件，命令更简洁可靠
+5. **创建 DNS Firewall 规则组**：
+   - 先创建空的域名列表
+   - 然后添加域名到列表（修复了 CLI 命令格式问题）
+   - 创建规则组并添加阻止规则
+6. **部署 Firewall Manager 策略**：
+   - 自动更新配置文件中的 ARN 和 ID 引用
+   - 部署 Network Firewall 和 DNS Firewall 策略
+   - 验证部署状态和合规性
+
+#### `deploy-2-scp-protect.sh` 执行的步骤：
+1. **创建 SCP 策略**：防止未授权修改防火墙配置
+2. **应用到根 OU**：影响所有成员账户
+3. **验证策略应用状态**
 
 ### 部署顺序建议
 1. **先部署 Firewall Manager**：确保防火墙策略正常工作
 2. **验证功能**：测试防火墙策略是否按预期工作
 3. **再部署 SCP**：添加权限保护，防止未授权修改
+
+### 预期执行时间
+- **Firewall Manager 部署**：约 5-10 分钟
+- **SCP 策略部署**：约 2-3 分钟
+- **策略生效时间**：约 10-15 分钟（跨账户传播）
 
 ## 总结
 

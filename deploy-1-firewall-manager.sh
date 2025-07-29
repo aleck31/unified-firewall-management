@@ -59,52 +59,46 @@ aws fms get-admin-account --region $REGION
 # 5. 创建 Network Firewall 规则组
 echo "5. 创建 Network Firewall 规则组..."
 
-# 创建无状态规则组配置
-cat > stateless-rules.json << 'EOF'
-{
-  "RulesSource": {
-    "StatelessRulesAndCustomActions": {
-      "StatelessRules": [
-        {
-          "RuleDefinition": {
-            "MatchAttributes": {
-              "Sources": [{"AddressDefinition": "0.0.0.0/0"}],
-              "Destinations": [{"AddressDefinition": "0.0.0.0/0"}],
-              "SourcePorts": [{"FromPort": 1, "ToPort": 65535}],
-              "DestinationPorts": [{"FromPort": 80, "ToPort": 80}],
-              "Protocols": [6]
-            },
-            "Actions": ["aws:forward_to_sfe"]
-          },
-          "Priority": 1
-        }
-      ]
-    }
-  }
-}
-EOF
-
+# 创建无状态规则组
+echo "创建无状态规则组..."
 aws network-firewall create-rule-group \
   --rule-group-name "OrgWideStatelessRules" \
   --type STATELESS \
   --capacity 100 \
-  --rule-group file://stateless-rules.json \
+  --rule-group '{
+    "RulesSource": {
+      "StatelessRulesAndCustomActions": {
+        "StatelessRules": [
+          {
+            "RuleDefinition": {
+              "MatchAttributes": {
+                "Sources": [{"AddressDefinition": "0.0.0.0/0"}],
+                "Destinations": [{"AddressDefinition": "0.0.0.0/0"}],
+                "SourcePorts": [{"FromPort": 1, "ToPort": 65535}],
+                "DestinationPorts": [{"FromPort": 80, "ToPort": 80}],
+                "Protocols": [6]
+              },
+              "Actions": ["aws:forward_to_sfe"]
+            },
+            "Priority": 1
+          }
+        ]
+      }
+    }
+  }' \
   --region $REGION || echo "无状态规则组可能已存在"
 
-# 创建有状态规则组配置
-cat > stateful-rules.json << 'EOF'
-{
-  "RulesSource": {
-    "RulesString": "drop tcp any any -> any 22 (msg:\"Block SSH from external\"; sid:1; rev:1;)\npass tcp any any -> any 443 (msg:\"Allow HTTPS\"; sid:2; rev:1;)"
-  }
-}
-EOF
-
+# 创建有状态规则组
+echo "创建有状态规则组..."
 aws network-firewall create-rule-group \
   --rule-group-name "OrgWideStatefulRules" \
   --type STATEFUL \
   --capacity 100 \
-  --rule-group file://stateful-rules.json \
+  --rule-group '{
+    "RulesSource": {
+      "RulesString": "drop tcp any any -> any 22 (msg:\"Block SSH from external\"; sid:1; rev:1;)\npass tcp any any -> any 443 (msg:\"Allow HTTPS\"; sid:2; rev:1;)"
+    }
+  }' \
   --region $REGION || echo "有状态规则组可能已存在"
 
 # 6. 创建 DNS Firewall 规则组
@@ -114,8 +108,29 @@ echo "6. 创建 DNS Firewall 规则组..."
 echo "创建域名列表..."
 aws route53resolver create-firewall-domain-list \
   --name "BlockedDomainsList" \
-  --domains "example.com" "badsite.org" "www.wicar.org" \
   --region $REGION 2>/dev/null || echo "域名列表可能已存在"
+
+# 获取域名列表ID
+echo "获取域名列表ID..."
+DOMAIN_LIST_ID=$(aws route53resolver list-firewall-domain-lists \
+  --region $REGION \
+  --query 'FirewallDomainLists[?Name==`BlockedDomainsList`].Id' \
+  --output text)
+
+if [ -z "$DOMAIN_LIST_ID" ] || [ "$DOMAIN_LIST_ID" = "None" ]; then
+  echo "❌ 无法获取域名列表ID，请检查域名列表是否创建成功"
+  exit 1
+fi
+
+echo "域名列表ID: $DOMAIN_LIST_ID"
+
+# 添加域名到列表
+echo "添加域名到列表..."
+aws route53resolver update-firewall-domains \
+  --firewall-domain-list-id "$DOMAIN_LIST_ID" \
+  --operation ADD \
+  --domains "badsite.org" "example.com" "www.wicar.org" \
+  --region $REGION 2>/dev/null || echo "域名可能已存在"
 
 # 获取域名列表ID
 echo "获取域名列表ID..."
@@ -207,39 +222,88 @@ echo "8. 部署 Firewall Manager 策略..."
 
 # 部署 Network Firewall 策略
 echo "部署 Network Firewall 策略..."
-aws fms put-policy \
+NW_POLICY_RESULT=$(aws fms put-policy \
   --policy file://firewall-manager-configs/network-firewall-policy.json \
-  --region $REGION
+  --region $REGION 2>&1)
+
+if [ $? -eq 0 ]; then
+  NW_POLICY_ID=$(echo "$NW_POLICY_RESULT" | jq -r '.Policy.PolicyId' 2>/dev/null || echo "unknown")
+  echo "✅ Network Firewall 策略创建成功，策略 ID: $NW_POLICY_ID"
+else
+  echo "❌ Network Firewall 策略创建失败:"
+  echo "$NW_POLICY_RESULT"
+  exit 1
+fi
 
 # 部署 DNS Firewall 策略
 echo "部署 DNS Firewall 策略..."
-aws fms put-policy \
+DNS_POLICY_RESULT=$(aws fms put-policy \
   --policy file://firewall-manager-configs/dns-firewall-policy.json \
-  --region $REGION
+  --region $REGION 2>&1)
+
+if [ $? -eq 0 ]; then
+  DNS_POLICY_ID=$(echo "$DNS_POLICY_RESULT" | jq -r '.Policy.PolicyId' 2>/dev/null || echo "unknown")
+  echo "✅ DNS Firewall 策略创建成功，策略 ID: $DNS_POLICY_ID"
+else
+  echo "❌ DNS Firewall 策略创建失败:"
+  echo "$DNS_POLICY_RESULT"
+  exit 1
+fi
 
 # 等待策略部署
 echo "等待策略部署完成..."
 sleep 60
 
-# 9. 验证部署
+# 9. 验证部署和资源共享
 echo "9. 验证部署状态..."
 
 echo "=== Firewall Manager 策略状态 ==="
 aws fms list-policies --region $REGION --query 'PolicyList[*].[PolicyName,PolicyStatus]' --output table
 
+# 检查策略合规状态
+echo "=== 策略合规状态检查 ==="
+if [ "$NW_POLICY_ID" != "unknown" ] && [ ! -z "$NW_POLICY_ID" ]; then
+  echo "Network Firewall 策略合规状态:"
+  aws fms list-compliance-status --policy-id "$NW_POLICY_ID" --region $REGION \
+    --query 'PolicyComplianceStatusList[*].[MemberAccount,PolicyComplianceStatus.ComplianceStatus]' \
+    --output table 2>/dev/null || echo "合规状态检查中..."
+fi
+
+if [ "$DNS_POLICY_ID" != "unknown" ] && [ ! -z "$DNS_POLICY_ID" ]; then
+  echo "DNS Firewall 策略合规状态:"
+  aws fms list-compliance-status --policy-id "$DNS_POLICY_ID" --region $REGION \
+    --query 'PolicyComplianceStatusList[*].[MemberAccount,PolicyComplianceStatus.ComplianceStatus]' \
+    --output table 2>/dev/null || echo "合规状态检查中..."
+fi
+
+# 检查资源共享状态
+echo "=== 资源共享状态 ==="
+echo "检查 Network Firewall 规则组共享:"
+aws ram get-resource-shares --resource-owner SELF --region $REGION \
+  --query 'resourceShares[?name==`FMS-*`].[name,status]' \
+  --output table 2>/dev/null || echo "资源共享信息获取中..."
+
 echo "=== Firewall Manager 部署完成 ==="
-echo "✅ Network Firewall 策略已部署"
-echo "✅ DNS Firewall 策略已部署"
+echo "✅ Network Firewall 策略已部署 (ID: $NW_POLICY_ID)"
+echo "✅ DNS Firewall 策略已部署 (ID: $DNS_POLICY_ID)"
 echo ""
-echo "监控地址:"
+echo "📊 部署状态:"
+echo "- 策略将自动应用到指定的 OU: $ROOT_OU_ID"
+echo "- 规则组将通过 AWS RAM 自动共享到成员账户"
+echo "- 防火墙将在成员账户的 VPC 中自动创建"
+echo ""
+echo "🔍 监控地址:"
 echo "- Firewall Manager: https://console.aws.amazon.com/wafv2/fms"
+echo "- AWS RAM: https://console.aws.amazon.com/ram"
+echo ""
+echo "⏰ 注意事项:"
+echo "- 策略部署可能需要几分钟时间"
+echo "- 合规状态检查可能需要10-15分钟"
+echo "- 可以通过 Firewall Manager 控制台监控部署进度"
 echo ""
 echo "下一步:"
 echo "1. 在 AWS 控制台中验证策略状态"
 echo "2. 如需部署 SCP 保护策略，请运行 ./deploy-2-scp-protect.sh"
 echo "3. 测试防火墙功能是否正常工作"
-
-# 清理临时文件
-rm -f stateless-rules.json stateful-rules.json
 
 echo "Firewall Manager 部署脚本执行完成！"
