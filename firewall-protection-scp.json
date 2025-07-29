@@ -1,0 +1,52 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyNetworkFirewallModification",
+      "Effect": "Deny",
+      "Action": [
+        "network-firewall:DeleteFirewall",
+        "network-firewall:DeleteFirewallPolicy",
+        "network-firewall:DeleteRuleGroup",
+        "network-firewall:UpdateFirewallDeleteProtection",
+        "network-firewall:UpdateFirewallPolicy",
+        "network-firewall:UpdateFirewallPolicyChangeProtection",
+        "network-firewall:UpdateRuleGroup",
+        "network-firewall:DisassociateSubnets"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::*:role/aws-service-role/fms.amazonaws.com/AWSServiceRoleForFMS",
+            "arn:aws:iam::*:role/FirewallManagerServiceRole",
+            "arn:aws:iam::*:role/SecurityAdminRole"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "DenyDNSFirewallModification", 
+      "Effect": "Deny",
+      "Action": [
+        "route53resolver:DeleteFirewallDomainList",
+        "route53resolver:DeleteFirewallRule",
+        "route53resolver:DeleteFirewallRuleGroup",
+        "route53resolver:DisassociateFirewallRuleGroup",
+        "route53resolver:UpdateFirewallDomains",
+        "route53resolver:UpdateFirewallRule",
+        "route53resolver:UpdateFirewallRuleGroupAssociation"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::*:role/aws-service-role/fms.amazonaws.com/AWSServiceRoleForFMS",
+            "arn:aws:iam::*:role/FirewallManagerServiceRole",
+            "arn:aws:iam::*:role/SecurityAdminRole"
+          ]
+        }
+      }
+    }
+  ]
+}
