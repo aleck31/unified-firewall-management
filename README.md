@@ -11,7 +11,7 @@
 - 使用**根账号的 admin 用户**执行（推荐）
 - 具备必要的 IAM 权限
 
-> 📋 **权限要求**：详细的执行权限说明请参考 `execution-permissions-guide.md`
+> 📋 **权限要求**：详细的执行权限说明请参考 `docs/execution-permissions-guide.md`
 
 ### 1. 权限检查（推荐）
 ```bash
@@ -65,19 +65,22 @@ chmod +x deploy-2-scp-protect.sh
 - 📊 **持续合规** - 自动监控和修复
 
 ## 文档结构
-- `firewall-manager-deployment-guide.md` - 完整实施指南
+- `check-permissions.sh` - 权限检查脚本
 - `deploy-0-prerequisites.sh` - 前置条件检查和配置
 - `deploy-1-firewall-manager.sh` - 部署 Firewall Manager
 - `deploy-2-scp-protect.sh` - 部署 SCP 保护策略
-- `execution-permissions-guide.md` - 执行权限需求说明
-- `check-permissions.sh` - 权限检查脚本
-- `firewall-manager-configs` - 策略文件
-  - `firewall-protection-scp.json` - SCP 策略文件
-  - `firewall-manager-configs/` - Firewall Manager 策略配置
+- `policies` - 策略文件
+  - `network-firewall-policy.json` - Network Firewall 策略配置
+  - `dns-firewall-policy.json` - DNS Firewall 策略配置
+  - `scp-firewall-protection.json` - SCP 策略文件
 - `validation/` - 成员账户验证工具和指南
   - `member-account-validation-guide.md` - 成员账户验证指南
   - `enable-config-member-accounts.sh` - 成员账户 Config 启用脚本
   - `member-validation-test.sh` - 自动化验证脚本
+- `docs/` - 详细文档
+  - `firewall-manager-deployment-guide.md` - 完整实施指南
+  - `firewall-unified-management-best-practices.md` - 统一管理最佳实践
+  - `execution-permissions-guide.md` - 执行权限需求说明
 
 ## 成员账户验证
 
@@ -101,4 +104,4 @@ chmod +x deploy-2-scp-protect.sh
 - SCP 保护策略测试
 
 ## 支持
-如遇问题，请参考 `firewall-manager-deployment-guide.md` 中的故障排除章节。
+如遇问题，请参考 `docs/firewall-manager-deployment-guide.md` 中的故障排除章节。

@@ -178,10 +178,10 @@ STATEFUL_ARN=$(aws network-firewall describe-rule-group \
   --output text)
 
 # 更新配置文件中的占位符
-sed -i "s|ou-id-12345678|$ROOT_OU_ID|g" firewall-manager-configs/*.json
-sed -i "s|arn:aws:network-firewall:ap-northeast-1:123456789012:stateless-rulegroup/OrgWideStatelessRules|$STATELESS_ARN|g" firewall-manager-configs/network-firewall-policy.json
-sed -i "s|arn:aws:network-firewall:ap-northeast-1:123456789012:stateful-rulegroup/OrgWideStatefulRules|$STATEFUL_ARN|g" firewall-manager-configs/network-firewall-policy.json
-sed -i "s|rslvr-frg-xxxxxxxxxx|$RULE_GROUP_ID|g" firewall-manager-configs/dns-firewall-policy.json
+sed -i "s|ou-id-12345678|$ROOT_OU_ID|g" policies/*.json
+sed -i "s|arn:aws:network-firewall:ap-northeast-1:123456789012:stateless-rulegroup/OrgWideStatelessRules|$STATELESS_ARN|g" policies/network-firewall-policy.json
+sed -i "s|arn:aws:network-firewall:ap-northeast-1:123456789012:stateful-rulegroup/OrgWideStatefulRules|$STATEFUL_ARN|g" policies/network-firewall-policy.json
+sed -i "s|rslvr-frg-xxxxxxxxxx|$RULE_GROUP_ID|g" policies/dns-firewall-policy.json
 ```
 
 #### 3.2 部署策略
@@ -225,15 +225,15 @@ sed -i "s|rslvr-frg-xxxxxxxxxx|$RULE_GROUP_ID|g" firewall-manager-configs/dns-fi
 ```bash
 # 先在测试 OU 部署（推荐）
 # 如果有测试 OU，先更新配置文件指向测试 OU
-# sed -i "s|$ROOT_OU_ID|ou-test-xxxxxxxxxx|g" firewall-manager-configs/*.json
+# sed -i "s|$ROOT_OU_ID|ou-test-xxxxxxxxxx|g" policies/*.json
 
 # 部署 Network Firewall 策略
 echo "部署 Network Firewall 策略..."
-aws fms put-policy --policy file://firewall-manager-configs/network-firewall-policy.json
+aws fms put-policy --policy file://policies/network-firewall-policy.json
 
 # 部署 DNS Firewall 策略  
 echo "部署 DNS Firewall 策略..."
-aws fms put-policy --policy file://firewall-manager-configs/dns-firewall-policy.json
+aws fms put-policy --policy file://policies/dns-firewall-policy.json
 
 # 等待策略部署完成
 echo "等待策略部署完成..."
@@ -250,7 +250,7 @@ aws fms list-policies --query 'PolicyList[*].[PolicyName,PolicyStatus]' --output
 
 ```bash
 # 更新 SCP 策略文件，添加 Firewall Manager 服务角色例外
-cat > firewall-protection-scp-updated.json << 'EOF'
+cat > scp-firewall-protection-updated.json << 'EOF'
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -314,7 +314,7 @@ SCP_POLICY_ID=$(aws organizations create-policy \
   --name "FirewallProtectionPolicy" \
   --description "Prevent unauthorized firewall modifications while allowing Firewall Manager" \
   --type SERVICE_CONTROL_POLICY \
-  --content file://firewall-protection-scp-updated.json \
+  --content file://scp-firewall-protection-updated.json \
   --query 'Policy.PolicySummary.Id' \
   --output text)
 

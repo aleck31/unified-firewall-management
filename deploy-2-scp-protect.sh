@@ -26,8 +26,8 @@ echo "根 OU ID: $ROOT_OU_ID"
 
 # 2. 验证 SCP 策略文件存在
 echo "2. 验证 SCP 策略文件..."
-if [ ! -f "firewall-protection-scp.json" ]; then
-    echo "❌ 找不到 SCP 策略文件: firewall-protection-scp.json"
+if [ ! -f "policies/scp-firewall-protection.json" ]; then
+    echo "❌ 找不到 SCP 策略文件: policies/scp-firewall-protection.json"
     exit 1
 fi
 
@@ -48,7 +48,7 @@ if [ ! -z "$EXISTING_POLICY" ] && [ "$EXISTING_POLICY" != "None" ]; then
         echo "更新现有 SCP 策略..."
         aws organizations update-policy \
           --policy-id "$EXISTING_POLICY" \
-          --content file://firewall-protection-scp.json
+          --content file://policies/scp-firewall-protection.json
         SCP_POLICY_ID="$EXISTING_POLICY"
         echo "✅ SCP 策略已更新"
     else
@@ -62,7 +62,7 @@ else
       --name "FirewallProtectionPolicy" \
       --description "Prevent unauthorized firewall modifications while allowing Firewall Manager" \
       --type SERVICE_CONTROL_POLICY \
-      --content file://firewall-protection-scp.json \
+      --content file://policies/scp-firewall-protection.json \
       --query 'Policy.PolicySummary.Id' \
       --output text)
 

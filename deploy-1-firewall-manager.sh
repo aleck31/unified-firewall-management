@@ -85,6 +85,19 @@ aws network-firewall create-rule-group \
               "Actions": ["aws:forward_to_sfe"]
             },
             "Priority": 1
+          },
+          {
+            "RuleDefinition": {
+              "MatchAttributes": {
+                "Sources": [{"AddressDefinition": "0.0.0.0/0"}],
+                "Destinations": [{"AddressDefinition": "0.0.0.0/0"}],
+                "SourcePorts": [{"FromPort": 1, "ToPort": 65535}],
+                "DestinationPorts": [{"FromPort": 443, "ToPort": 443}],
+                "Protocols": [6]
+              },
+              "Actions": ["aws:forward_to_sfe"]
+            },
+            "Priority": 2
           }
         ]
       }
@@ -100,7 +113,7 @@ aws network-firewall create-rule-group \
   --capacity 100 \
   --rule-group '{
     "RulesSource": {
-      "RulesString": "drop tcp any any -> any 22 (msg:\"Block SSH from external\"; sid:1; rev:1;)\npass tcp any any -> any 443 (msg:\"Allow HTTPS\"; sid:2; rev:1;)"
+      "RulesString": "pass tcp any any -> any 80 (msg:\"Allow HTTP\"; sid:1; rev:1;)\npass tcp any any -> any 443 (msg:\"Allow HTTPS\"; sid:2; rev:1;)\ndrop tcp any any -> any 22 (msg:\"Block SSH from external\"; sid:3; rev:1;)"
     }
   }' \
   --region $REGION || echo "有状态规则组可能已存在"
@@ -169,6 +182,7 @@ aws route53resolver create-firewall-rule \
   --firewall-domain-list-id "$DOMAIN_LIST_ID" \
   --priority 10 \
   --action BLOCK \
+  --block-response NXDOMAIN \
   --name "BlockMalwareDomains" \
   --region $REGION 2>/dev/null || echo "DNS 规则可能已存在"
 
@@ -194,18 +208,18 @@ echo "无状态规则组 ARN: $STATELESS_ARN"
 echo "有状态规则组 ARN: $STATEFUL_ARN"
 
 # 确保配置目录存在
-mkdir -p firewall-manager-configs
+mkdir -p policies
 
 # 更新 Network Firewall 策略配置
 echo "更新 Network Firewall 策略配置..."
-sed -i "s|ou-id-12345678|$TARGET_OU_ID|g" firewall-manager-configs/network-firewall-policy.json
-sed -i "s|arn:aws:network-firewall:ap-northeast-1:123456789012:stateless-rulegroup/OrgWideStatelessRules|$STATELESS_ARN|g" firewall-manager-configs/network-firewall-policy.json
-sed -i "s|arn:aws:network-firewall:ap-northeast-1:123456789012:stateful-rulegroup/OrgWideStatefulRules|$STATEFUL_ARN|g" firewall-manager-configs/network-firewall-policy.json
+sed -i "s|TARGET_OU_PLACEHOLDER|$TARGET_OU_ID|g" policies/network-firewall-policy.json
+sed -i "s|STATELESS_ARN_PLACEHOLDER|$STATELESS_ARN|g" policies/network-firewall-policy.json
+sed -i "s|STATEFUL_ARN_PLACEHOLDER|$STATEFUL_ARN|g" policies/network-firewall-policy.json
 
 # 更新 DNS Firewall 策略配置
 echo "更新 DNS Firewall 策略配置..."
-sed -i "s|ou-id-12345678|$TARGET_OU_ID|g" firewall-manager-configs/dns-firewall-policy.json
-sed -i "s|rslvr-frg-xxxxxxxxxx|$RULE_GROUP_ID|g" firewall-manager-configs/dns-firewall-policy.json
+sed -i "s|TARGET_OU_PLACEHOLDER|$TARGET_OU_ID|g" policies/dns-firewall-policy.json
+sed -i "s|DNS_RULE_GROUP_ID_PLACEHOLDER|$RULE_GROUP_ID|g" policies/dns-firewall-policy.json
 
 # 5. 部署 Firewall Manager 策略
 echo "5. 部署 Firewall Manager 策略..."
@@ -213,7 +227,7 @@ echo "5. 部署 Firewall Manager 策略..."
 # 部署 Network Firewall 策略
 echo "部署 Network Firewall 策略..."
 NW_POLICY_RESULT=$(aws fms put-policy \
-  --policy file://firewall-manager-configs/network-firewall-policy.json \
+  --policy file://policies/network-firewall-policy.json \
   --region $REGION 2>&1)
 
 if [ $? -eq 0 ]; then
@@ -228,7 +242,7 @@ fi
 # 部署 DNS Firewall 策略
 echo "部署 DNS Firewall 策略..."
 DNS_POLICY_RESULT=$(aws fms put-policy \
-  --policy file://firewall-manager-configs/dns-firewall-policy.json \
+  --policy file://policies/dns-firewall-policy.json \
   --region $REGION 2>&1)
 
 if [ $? -eq 0 ]; then

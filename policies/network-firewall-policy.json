@@ -1,0 +1,14 @@
+{
+  "PolicyName": "OrgWideNetworkFirewallPolicy",
+  "SecurityServicePolicyData": {
+    "Type": "NETWORK_FIREWALL",
+    "ManagedServiceData": "{\"type\":\"NETWORK_FIREWALL\",\"networkFirewallStatelessRuleGroupReferences\":[{\"resourceARN\":\"STATELESS_ARN_PLACEHOLDER\",\"priority\":1}],\"networkFirewallStatefulRuleGroupReferences\":[{\"resourceARN\":\"STATEFUL_ARN_PLACEHOLDER\"}],\"networkFirewallStatelessDefaultActions\":[\"aws:forward_to_sfe\"],\"networkFirewallStatelessFragmentDefaultActions\":[\"aws:forward_to_sfe\"],\"networkFirewallOrchestrationConfig\":{\"singleFirewallEndpointPerVPC\":false,\"allowedIPV4CidrList\":[\"10.0.0.0/28\"],\"routeManagementAction\":\"OFF\"}}"
+  },
+  "ResourceType": "AWS::EC2::VPC",
+  "IncludeMap": {
+    "ORG_UNIT": ["TARGET_OU_PLACEHOLDER"]
+  },
+  "ExcludeResourceTags": false,
+  "RemediationEnabled": true,
+  "DeleteUnusedFMManagedResources": false
+}

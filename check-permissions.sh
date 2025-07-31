@@ -117,9 +117,9 @@ else
     echo "🔧 建议："
     echo "   1. 使用根账号管理员执行（推荐）"
     echo "   2. 或联系管理员授予必要权限"
-    echo "   3. 参考 execution-permissions-guide.md 了解详细权限要求"
+    echo "   3. 参考 docs/execution-permissions-guide.md 了解详细权限要求"
 fi
 
 echo ""
-echo "📚 更多信息请参考: execution-permissions-guide.md"
+echo "📚 更多信息请参考: docs/execution-permissions-guide.md"
 echo "=== 权限检查完成 ==="

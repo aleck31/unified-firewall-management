@@ -12,7 +12,12 @@
         "network-firewall:UpdateFirewallPolicy",
         "network-firewall:UpdateFirewallPolicyChangeProtection",
         "network-firewall:UpdateRuleGroup",
-        "network-firewall:DisassociateSubnets"
+        "network-firewall:DisassociateSubnets",
+        "network-firewall:CreateFirewall",
+        "network-firewall:CreateFirewallPolicy",
+        "network-firewall:CreateRuleGroup",
+        "network-firewall:AssociateSubnets",
+        "network-firewall:PutResourcePolicy"
       ],
       "Resource": "*",
       "Condition": {
@@ -35,7 +40,9 @@
         "route53resolver:DisassociateFirewallRuleGroup",
         "route53resolver:UpdateFirewallDomains",
         "route53resolver:UpdateFirewallRule",
-        "route53resolver:UpdateFirewallRuleGroupAssociation"
+        "route53resolver:UpdateFirewallRuleGroupAssociation",
+        "route53resolver:CreateFirewallRule",
+        "route53resolver:PutFirewallRuleGroupPolicy"
       ],
       "Resource": "*",
       "Condition": {
