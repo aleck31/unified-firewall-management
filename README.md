@@ -32,6 +32,10 @@ REGION="ap-northeast-1"               # 替换为你的区域
 ### 3. 分步部署脚本
 
 ```bash
+# 步骤0：检查和配置前置条件
+chmod +x deploy-0-prerequisites.sh
+./deploy-0-prerequisites.sh
+
 # 步骤1：部署 Firewall Manager
 chmod +x deploy-1-firewall-manager.sh
 ./deploy-1-firewall-manager.sh

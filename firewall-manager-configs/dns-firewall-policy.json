@@ -2,11 +2,11 @@
   "PolicyName": "OrgWideDNSFirewallPolicy",
   "SecurityServicePolicyData": {
     "Type": "DNS_FIREWALL",
-    "ManagedServiceData": "{\"type\":\"DNS_FIREWALL\",\"preProcessRuleGroups\":[{\"ruleGroupId\":\"rslvr-frg-xxxxxxxxxx\",\"priority\":100}],\"postProcessRuleGroups\":[]}"
+    "ManagedServiceData": "{\"type\":\"DNS_FIREWALL\",\"preProcessRuleGroups\":[{\"ruleGroupId\":\"rslvr-frg-b90c104e0d944ad2\",\"priority\":10}],\"postProcessRuleGroups\":[]}"
   },
   "ResourceType": "AWS::EC2::VPC",
   "IncludeMap": {
-    "OU": ["ou-root-xxxxxxxxxx"]
+    "ORG_UNIT": ["ou-id-12345678"]
   },
   "ExcludeResourceTags": false,
   "RemediationEnabled": true,

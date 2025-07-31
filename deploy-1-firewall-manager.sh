@@ -1,63 +1,67 @@
 #!/bin/bash
 
 # AWS Firewall Manager 部署脚本
-# 仅部署 Firewall Manager 策略，不包含 SCP
+# 专注于 Firewall Manager 策略部署，前置条件请先运行 deploy-0-prerequisites.sh
 
 set -e
 
 # 配置变量 - 请根据实际环境修改
 REGION="ap-northeast-1"               # 替换为你的区域
 
-echo "=== AWS Firewall Manager 部署开始 ==="
+echo "=== AWS Firewall Manager 策略部署开始 ==="
 
-# 1. 环境准备和验证
-echo "1. 验证 AWS Organizations 环境..."
-aws organizations describe-organization --region $REGION || {
-    echo "错误: AWS Organizations 未启用"
-    exit 1
-}
-
-# 获取环境信息
+# 1. 获取环境信息
+echo "1. 获取环境信息..."
 ADMIN_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 ROOT_OU_ID=$(aws organizations list-roots --query 'Roots[0].Id' --output text)
 
 echo "管理员账户ID: $ADMIN_ACCOUNT_ID"
 echo "根 OU ID: $ROOT_OU_ID"
 
-# 2. 启用资源共享
-echo "2. 启用 AWS RAM 资源共享..."
-aws ram enable-sharing-with-aws-organization --region $REGION 2>/dev/null || {
-    echo "⚠️  RAM 资源共享可能已启用或在当前区域不可用"
-    echo "继续执行部署..."
-}
+# 检查现有的子 OU
+echo "检查现有的组织单元..."
+EXISTING_OUS=$(aws organizations list-organizational-units-for-parent \
+  --parent-id $ROOT_OU_ID \
+  --query 'OrganizationalUnits[*].[Id,Name]' \
+  --output table)
 
-# 3. 设置 Firewall Manager 管理员账户
-echo "3. 检查 Firewall Manager 管理员账户..."
-
-# 检查是否已经设置了管理员账户
-CURRENT_ADMIN=$(aws fms get-admin-account --region $REGION --query 'AdminAccount' --output text 2>/dev/null || echo "None")
-
-if [ "$CURRENT_ADMIN" = "$ADMIN_ACCOUNT_ID" ]; then
-    echo "✅ 当前账户已经是 Firewall Manager 管理员账户"
-elif [ "$CURRENT_ADMIN" != "None" ] && [ "$CURRENT_ADMIN" != "null" ]; then
-    echo "⚠️  检测到其他账户 ($CURRENT_ADMIN) 已设置为管理员"
-    echo "如需更改，请先撤销现有管理员账户"
-    echo "继续使用现有管理员账户..."
+if [ ! -z "$EXISTING_OUS" ] && [ "$EXISTING_OUS" != "None" ]; then
+  echo "发现现有的组织单元:"
+  echo "$EXISTING_OUS"
+  echo ""
+  echo "请选择要使用的 OU ID，或输入 'new' 创建新的安全管理 OU:"
+  read -p "OU ID (或 'new'): " USER_CHOICE
+  
+  if [ "$USER_CHOICE" = "new" ]; then
+    # 创建新的子 OU
+    echo "创建新的安全管理子 OU..."
+    TARGET_OU_ID=$(aws organizations create-organizational-unit \
+      --parent-id $ROOT_OU_ID \
+      --name "SecurityOU" \
+      --query 'OrganizationalUnit.Id' \
+      --output text)
+    echo "已创建安全管理 OU ID: $TARGET_OU_ID"
+  else
+    TARGET_OU_ID="$USER_CHOICE"
+    echo "使用现有 OU ID: $TARGET_OU_ID"
+  fi
 else
-    echo "设置 Firewall Manager 管理员账户..."
-    aws fms put-admin-account --admin-account $ADMIN_ACCOUNT_ID --region $REGION
-    
-    # 等待管理员账户设置完成
-    echo "等待管理员账户设置完成..."
-    sleep 30
+  echo "未发现现有的子 OU，将创建新的安全管理 OU..."
+  TARGET_OU_ID=$(aws organizations create-organizational-unit \
+    --parent-id $ROOT_OU_ID \
+    --name "SecurityOU" \
+    --query 'OrganizationalUnit.Id' \
+    --output text)
+  echo "已创建安全管理 OU ID: $TARGET_OU_ID"
 fi
 
-# 4. 验证管理员账户
-echo "4. 验证管理员账户设置..."
-aws fms get-admin-account --region $REGION
+if [ -z "$TARGET_OU_ID" ] || [ "$TARGET_OU_ID" = "None" ]; then
+  echo "❌ 无法获取或创建安全管理 OU"
+  exit 1
+fi
 
-# 5. 创建 Network Firewall 规则组
-echo "5. 创建 Network Firewall 规则组..."
+# 2. 创建 Network Firewall 规则组
+echo "2. 创建 Network Firewall 规则组..."
 
 # 创建无状态规则组
 echo "创建无状态规则组..."
@@ -101,8 +105,8 @@ aws network-firewall create-rule-group \
   }' \
   --region $REGION || echo "有状态规则组可能已存在"
 
-# 6. 创建 DNS Firewall 规则组
-echo "6. 创建 DNS Firewall 规则组..."
+# 3. 创建 DNS Firewall 规则组
+echo "3. 创建 DNS Firewall 规则组..."
 
 # 创建域名列表
 echo "创建域名列表..."
@@ -131,20 +135,6 @@ aws route53resolver update-firewall-domains \
   --operation ADD \
   --domains "badsite.org" "example.com" "www.wicar.org" \
   --region $REGION 2>/dev/null || echo "域名可能已存在"
-
-# 获取域名列表ID
-echo "获取域名列表ID..."
-DOMAIN_LIST_ID=$(aws route53resolver list-firewall-domain-lists \
-  --region $REGION \
-  --query 'FirewallDomainLists[?Name==`BlockedDomainsList`].Id' \
-  --output text)
-
-if [ -z "$DOMAIN_LIST_ID" ] || [ "$DOMAIN_LIST_ID" = "None" ]; then
-  echo "❌ 无法获取域名列表ID，请检查域名列表是否创建成功"
-  exit 1
-fi
-
-echo "域名列表ID: $DOMAIN_LIST_ID"
 
 # 创建 DNS 防火墙规则组
 echo "创建 DNS 防火墙规则组..."
@@ -177,13 +167,13 @@ aws route53resolver create-firewall-rule \
   --creator-request-id $(uuidgen) \
   --firewall-rule-group-id "$RULE_GROUP_ID" \
   --firewall-domain-list-id "$DOMAIN_LIST_ID" \
-  --priority 100 \
+  --priority 10 \
   --action BLOCK \
   --name "BlockMalwareDomains" \
   --region $REGION 2>/dev/null || echo "DNS 规则可能已存在"
 
-# 7. 准备 Firewall Manager 策略配置
-echo "7. 准备 Firewall Manager 策略配置..."
+# 4. 准备 Firewall Manager 策略配置
+echo "4. 准备 Firewall Manager 策略配置..."
 
 # 获取规则组 ARN
 STATELESS_ARN=$(aws network-firewall describe-rule-group \
@@ -208,17 +198,17 @@ mkdir -p firewall-manager-configs
 
 # 更新 Network Firewall 策略配置
 echo "更新 Network Firewall 策略配置..."
-sed -i "s|ou-root-xxxxxxxxxx|$ROOT_OU_ID|g" firewall-manager-configs/network-firewall-policy.json
+sed -i "s|ou-id-12345678|$TARGET_OU_ID|g" firewall-manager-configs/network-firewall-policy.json
 sed -i "s|arn:aws:network-firewall:ap-northeast-1:123456789012:stateless-rulegroup/OrgWideStatelessRules|$STATELESS_ARN|g" firewall-manager-configs/network-firewall-policy.json
 sed -i "s|arn:aws:network-firewall:ap-northeast-1:123456789012:stateful-rulegroup/OrgWideStatefulRules|$STATEFUL_ARN|g" firewall-manager-configs/network-firewall-policy.json
 
 # 更新 DNS Firewall 策略配置
 echo "更新 DNS Firewall 策略配置..."
-sed -i "s|ou-root-xxxxxxxxxx|$ROOT_OU_ID|g" firewall-manager-configs/dns-firewall-policy.json
+sed -i "s|ou-id-12345678|$TARGET_OU_ID|g" firewall-manager-configs/dns-firewall-policy.json
 sed -i "s|rslvr-frg-xxxxxxxxxx|$RULE_GROUP_ID|g" firewall-manager-configs/dns-firewall-policy.json
 
-# 8. 部署 Firewall Manager 策略
-echo "8. 部署 Firewall Manager 策略..."
+# 5. 部署 Firewall Manager 策略
+echo "5. 部署 Firewall Manager 策略..."
 
 # 部署 Network Firewall 策略
 echo "部署 Network Firewall 策略..."
@@ -254,8 +244,8 @@ fi
 echo "等待策略部署完成..."
 sleep 60
 
-# 9. 验证部署和资源共享
-echo "9. 验证部署状态..."
+# 6. 验证部署和资源共享
+echo "6. 验证部署状态..."
 
 echo "=== Firewall Manager 策略状态 ==="
 aws fms list-policies --region $REGION --query 'PolicyList[*].[PolicyName,PolicyStatus]' --output table
@@ -288,7 +278,7 @@ echo "✅ Network Firewall 策略已部署 (ID: $NW_POLICY_ID)"
 echo "✅ DNS Firewall 策略已部署 (ID: $DNS_POLICY_ID)"
 echo ""
 echo "📊 部署状态:"
-echo "- 策略将自动应用到指定的 OU: $ROOT_OU_ID"
+echo "- 策略将自动应用到指定的 OU: $TARGET_OU_ID"
 echo "- 规则组将通过 AWS RAM 自动共享到成员账户"
 echo "- 防火墙将在成员账户的 VPC 中自动创建"
 echo ""

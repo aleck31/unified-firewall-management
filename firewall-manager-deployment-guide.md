@@ -22,6 +22,17 @@
 
 ### 阶段一：环境准备（根账号 admin 用户执行）
 
+基于实际测试验证总结的注意事项：
+
+✅ **前置条件要求**：
+- AWS Config 必须启用（Firewall Manager 的必需前置条件）
+- Organizations 必须启用 "All Features"
+- AWS RAM 资源共享必须启用
+
+✅ **OU 结构限制**：
+- Firewall Manager 不支持直接使用根 OU
+- 必须使用子 OU，脚本会自动处理 OU 选择
+
 #### 1.1 验证 AWS Organizations 环境
 ```bash
 # 确保已启用 AWS Organizations
@@ -56,7 +67,10 @@ aws fms get-admin-account
 
 ### 阶段二：创建防火墙规则组（根账号 admin 用户执行）
 
-> ⚠️ **重要说明**：根据 AWS 官方文档，Firewall Manager 无法直接定义规则组内容。规则组必须预先在 Firewall Manager 管理员账户中创建，然后在策略中引用这些已存在的规则组。Firewall Manager 会通过 AWS RAM 自动将这些规则组共享到成员账户，并在每个 VPC 中自动创建防火墙应用这些规则。
+> ⚠️ **重要说明**：
+> 1. 根据 AWS 官方文档，Firewall Manager 无法直接定义规则组内容。规则组必须预先在 Firewall Manager 管理员账户中创建，然后在策略中引用这些已存在的规则组。
+> 2. **Firewall Manager 不支持直接使用根 OU**，必须使用子 OU。脚本会自动检查现有 OU 或创建新的子 OU。
+> 3. **AWS Config 必须启用**，这是 Firewall Manager 的必需前置条件。
 
 #### 2.1 创建 Network Firewall 规则组
 
@@ -164,7 +178,7 @@ STATEFUL_ARN=$(aws network-firewall describe-rule-group \
   --output text)
 
 # 更新配置文件中的占位符
-sed -i "s|ou-root-xxxxxxxxxx|$ROOT_OU_ID|g" firewall-manager-configs/*.json
+sed -i "s|ou-id-12345678|$ROOT_OU_ID|g" firewall-manager-configs/*.json
 sed -i "s|arn:aws:network-firewall:ap-northeast-1:123456789012:stateless-rulegroup/OrgWideStatelessRules|$STATELESS_ARN|g" firewall-manager-configs/network-firewall-policy.json
 sed -i "s|arn:aws:network-firewall:ap-northeast-1:123456789012:stateful-rulegroup/OrgWideStatefulRules|$STATEFUL_ARN|g" firewall-manager-configs/network-firewall-policy.json
 sed -i "s|rslvr-frg-xxxxxxxxxx|$RULE_GROUP_ID|g" firewall-manager-configs/dns-firewall-policy.json
@@ -182,7 +196,7 @@ sed -i "s|rslvr-frg-xxxxxxxxxx|$RULE_GROUP_ID|g" firewall-manager-configs/dns-fi
   },
   "ResourceType": "AWS::EC2::VPC",
   "IncludeMap": {
-    "OU": ["ou-root-xxxxxxxxxx"]
+    "OU": ["ou-id-12345678"]
   },
   "ExcludeResourceTags": false,
   "RemediationEnabled": true,
@@ -200,7 +214,7 @@ sed -i "s|rslvr-frg-xxxxxxxxxx|$RULE_GROUP_ID|g" firewall-manager-configs/dns-fi
   },
   "ResourceType": "AWS::EC2::VPC",
   "IncludeMap": {
-    "OU": ["ou-root-xxxxxxxxxx"]
+    "OU": ["ou-id-12345678"]
   },
   "ExcludeResourceTags": false,
   "RemediationEnabled": true,

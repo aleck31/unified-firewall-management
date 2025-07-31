@@ -2,11 +2,11 @@
   "PolicyName": "OrgWideNetworkFirewallPolicy",
   "SecurityServicePolicyData": {
     "Type": "NETWORK_FIREWALL",
-    "ManagedServiceData": "{\"type\":\"NETWORK_FIREWALL\",\"networkFirewallStatelessRuleGroupReferences\":[{\"resourceArn\":\"arn:aws:network-firewall:ap-northeast-1:123456789012:stateless-rulegroup/OrgWideStatelessRules\",\"priority\":100}],\"networkFirewallStatefulRuleGroupReferences\":[{\"resourceArn\":\"arn:aws:network-firewall:ap-northeast-1:123456789012:stateful-rulegroup/OrgWideStatefulRules\"}],\"networkFirewallStatelessDefaultActions\":[\"aws:forward_to_sfe\"],\"networkFirewallStatelessFragmentDefaultActions\":[\"aws:forward_to_sfe\"],\"networkFirewallOrchestrationConfig\":{\"singleFirewallEndpointPerVPC\":false,\"allowedIPV4CidrList\":[\"0.0.0.0/0\"]}}"
+    "ManagedServiceData": "{\"type\":\"NETWORK_FIREWALL\",\"networkFirewallStatelessRuleGroupReferences\":[{\"resourceARN\":\"arn:aws:network-firewall:ap-northeast-1:123456789012:stateless-rulegroup/OrgWideStatelessRules\",\"priority\":1}],\"networkFirewallStatefulRuleGroupReferences\":[{\"resourceARN\":\"arn:aws:network-firewall:ap-northeast-1:123456789012:stateful-rulegroup/OrgWideStatefulRules\"}],\"networkFirewallStatelessDefaultActions\":[\"aws:forward_to_sfe\"],\"networkFirewallStatelessFragmentDefaultActions\":[\"aws:forward_to_sfe\"],\"networkFirewallOrchestrationConfig\":{\"singleFirewallEndpointPerVPC\":false,\"allowedIPV4CidrList\":[\"10.0.0.0/28\"],\"routeManagementAction\":\"OFF\"}}"
   },
   "ResourceType": "AWS::EC2::VPC",
   "IncludeMap": {
-    "OU": ["ou-root-xxxxxxxxxx"]
+    "ORG_UNIT": ["ou-id-12345678"]
   },
   "ExcludeResourceTags": false,
   "RemediationEnabled": true,
