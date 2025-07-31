@@ -66,12 +66,39 @@ chmod +x deploy-2-scp-protect.sh
 
 ## 文档结构
 - `firewall-manager-deployment-guide.md` - 完整实施指南
+- `deploy-0-prerequisites.sh` - 前置条件检查和配置
 - `deploy-1-firewall-manager.sh` - 部署 Firewall Manager
 - `deploy-2-scp-protect.sh` - 部署 SCP 保护策略
 - `execution-permissions-guide.md` - 执行权限需求说明
 - `check-permissions.sh` - 权限检查脚本
-- `firewall-protection-scp.json` - SCP 策略文件
-- `firewall-manager-configs/` - Firewall Manager 策略配置
+- `firewall-manager-configs` - 策略文件
+  - `firewall-protection-scp.json` - SCP 策略文件
+  - `firewall-manager-configs/` - Firewall Manager 策略配置
+- `validation/` - 成员账户验证工具和指南
+  - `member-account-validation-guide.md` - 成员账户验证指南
+  - `enable-config-member-accounts.sh` - 成员账户 Config 启用脚本
+  - `member-validation-test.sh` - 自动化验证脚本
+
+## 成员账户验证
+
+部署完成后，成员账户用户可以使用以下方式验证策略是否生效：
+
+### 启用Config
+```bash
+./validation/enable-config-member-accounts.sh
+```
+
+### 快速验证
+```bash
+# 运行自动化验证脚本
+./validation/member-validation-test.sh
+```
+
+### 详细验证
+参考 `validation/member-account-validation-guide.md` 进行完整的手动验证，包括：
+- Network Firewall 规则验证
+- DNS Firewall 阻断测试
+- SCP 保护策略测试
 
 ## 支持
 如遇问题，请参考 `firewall-manager-deployment-guide.md` 中的故障排除章节。
