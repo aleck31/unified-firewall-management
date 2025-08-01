@@ -8,7 +8,13 @@
   "IncludeMap": {
     "ORG_UNIT": ["TARGET_OU_PLACEHOLDER"]
   },
-  "ExcludeResourceTags": false,
+  "ExcludeResourceTags": true,
+  "ResourceTags": [
+    {
+      "Key": "VpcType",
+      "Value": "default"
+    }
+  ],
   "RemediationEnabled": true,
   "DeleteUnusedFMManagedResources": false
 }

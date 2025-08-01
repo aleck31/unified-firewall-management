@@ -97,7 +97,7 @@ aws s3api put-bucket-policy --bucket "\$CONFIG_BUCKET" --policy file:///tmp/conf
 
 # 创建 Configuration Recorder
 aws configservice put-configuration-recorder \\
-    --configuration-recorder name=default,roleARN=arn:aws:iam::${ACCOUNT_ID}:role/aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig,recordingGroup='{resourceTypes=[AWS::EC2::VPC,AWS::NetworkFirewall::RuleGroup,AWS::NetworkFirewall::FirewallPolicy,AWS::EC2::InternetGateway,AWS::EC2::RouteTable,AWS::EC2::Subnet]}' \\
+    --configuration-recorder name=default,roleARN=arn:aws:iam::${ACCOUNT_ID}:role/aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig,recordingGroup='{resourceTypes=[AWS::EC2::VPC,AWS::NetworkFirewall::RuleGroup,AWS::NetworkFirewall::FirewallPolicy,AWS::NetworkFirewall::Firewall,AWS::Route53Resolver::FirewallRuleGroupAssociation,AWS::Route53Resolver::FirewallRuleGroup,AWS::Route53Resolver::FirewallDomainList,AWS::EC2::InternetGateway,AWS::EC2::RouteTable,AWS::EC2::Subnet]}' \\
     --region $REGION
 
 # 创建 Delivery Channel
