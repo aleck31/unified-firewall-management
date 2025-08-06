@@ -34,7 +34,7 @@
 ### 工作流程
 ```
 👥 Firewall Manager 管理员账号
-    ↓ 修改规则组
+    ↓ 创建/修改规则组
 📋 OrgWideStatefulRules (规则组)
     ↓ 自动检测变化 (UpdateToken 机制)
 🔥 OrgWideNetworkFirewallPolicy (Firewall Manager 策略)
@@ -48,11 +48,10 @@
 
 根据 AWS 官方文档 [Using AWS Network Firewall policies in Firewall Manager](https://docs.aws.amazon.com/waf/latest/developerguide/network-firewall-policies.html)：
 
-> **Important**  
 > **You must have your Network Firewall rule groups defined.**  
 > When you specify a new Network Firewall policy, you define the firewall policy the same as you do when you're using AWS Network Firewall directly. You specify the stateless rule groups to add, default stateless actions, and stateful rule groups. **Your rule groups must already exist in the Firewall Manager administrator account for you to include them in the policy.**
 
-### 解读：
+**解读：**
 - **规则组必须存在于 Firewall Manager 管理员账号中**
 - **不能直接引用其他账号的规则组**
 - **管理员账号通过 Organizations 管理账号委托创建**
@@ -147,7 +146,13 @@ aws fms put-policy \
         \"networkFirewallStatelessFragmentDefaultActions\":[\"aws:forward_to_sfe\"],
         \"networkFirewallStatefulRuleGroupReferences\":[{
           \"resourceARN\":\"arn:aws:network-firewall:region:account:stateful-rulegroup/OrgWideStatefulRules\"
-        }]
+        }],
+        \"networkFirewallOrchestrationConfig\":{
+          \"singleFirewallEndpointPerVPC\":true,
+          \"allowedIPV4CidrList\":[\"10.0.0.0/28\",\"10.0.1.16/28\",\"10.0.2.16/28\",\"10.0.3.16/28\"],
+          \"routeManagementAction\":\"MONITOR\",
+          \"routeManagementTargetTypes\":[\"InternetGateway\"]
+        }
       }"
     },
     "ResourceType": "AWS::EC2::VPC",
@@ -157,6 +162,32 @@ aws fms put-policy \
     }
   }'
 ```
+
+#### 🔧 **关键配置参数说明**
+
+| 参数 | 值 | 作用 | 重要性 |
+|------|----|----- |--------|
+| `singleFirewallEndpointPerVPC` | `true` | 每个VPC只创建一个防火墙端点 | ⭐⭐⭐⭐⭐ |
+| `routeManagementAction` | `"MONITOR"` | 启用路由表监控 | ⭐⭐⭐⭐ |
+| `routeManagementTargetTypes` | `["InternetGateway"]` | 监控Internet Gateway路由 | ⭐⭐⭐ |
+| `allowedIPV4CidrList` | `/28` 范围 | 防火墙子网CIDR范围 | ⭐⭐⭐⭐⭐ |
+
+#### 🎯 **参数选择建议**
+
+**推荐配置（生产环境）**：
+```json
+{
+  "singleFirewallEndpointPerVPC": true,
+  "routeManagementAction": "MONITOR",
+  "allowedIPV4CidrList": ["10.0.0.0/28", "10.0.1.16/28", "10.0.2.16/28"]
+}
+```
+
+**优势**：
+- ✅ **部署可靠性高** - 避免多AZ CIDR冲突问题
+- ✅ **管理简单** - 单端点模式减少复杂性  
+- ✅ **路由监控** - 自动检测绕过防火墙的流量
+- ✅ **成本优化** - 减少防火墙端点数量
 
 ### 3. 部署 SCP 保护策略
 ```json
@@ -180,80 +211,103 @@ aws fms put-policy \
 }
 ```
 
-## 🔄 **策略更新机制与行为**
+## 🔄 **更新防火墙策略**
 
 ### 策略更新原理
 
-当更新 Firewall Manager 策略时，系统采用"就地更新"而非"删除重建"的机制：
+当更新 Firewall Manager 策略时，系统采用"就地更新"机制，**策略ID保持不变**：
 
-#### 🔍 **策略ID变更机制**
+#### ✅ **策略更新机制**
 ```
-旧策略更新前：
+策略更新前：
 ├── 策略ID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ├── 防火墙实例: FMManagedNetworkFirewall...xxxxxxxx...vpc-xxx
 └── 合规状态: COMPLIANT
 
 策略更新后：
-├── 策略ID: yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy (新ID)
+├── 策略ID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (保持不变)
 ├── 防火墙实例: FMManagedNetworkFirewall...xxxxxxxx...vpc-xxx (保留)
-├── 合规状态: VIOLATOR (临时状态)
-└── 重新评估: 5-15分钟后恢复COMPLIANT
+├── 合规状态: COMPLIANT (快速恢复)
+└── 配置变更: 立即同步到现有防火墙
 ```
 
-#### ✅ **防火墙实例保留行为**
-
-| 组件 | 更新行为 | 说明 |
-|------|----------|------|
-| **防火墙实例** | ✅ **保留** | 物理防火墙继续运行，不会重建 |
-| **防火墙子网** | ✅ **保留** | 网络拓扑保持不变 |
-| **网络流量** | ✅ **持续过滤** | 安全防护不中断 |
-| **策略关联** | ⚠️ **重新关联** | 新策略ID需要重新识别现有资源 |
-| **合规状态** | ⚠️ **临时违规** | 重新评估期间显示违规，属正常现象 |
-
-#### 🔧 **配置同步过程**
+#### 📝 **如果新建策略替换旧策略**
 ```
-1. 策略更新触发
+新增策略后（不包含PolicyId）：
+├── 策略ID: yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy (创建新策略)
+├── 防火墙实例: FMManagedNetworkFirewall...xxxxxxxx...vpc-xxx (孤立)
+├── 合规状态: VIOLATOR (临时违规)
+└── 重新评估: 需要5-15分钟重新关联
+```
+
+#### ✅ **防火墙实例行为对比**
+
+| 更新方式 | 策略ID | 防火墙关联 | 合规状态 | 恢复时间 |
+|----------|--------|------------|----------|----------|
+| **更新策略** | ✅ 保持不变 | ✅ 立即识别 | ✅ 快速恢复 | < 2分钟 |
+| **新建策略** | ❌ 生成新ID | ❌ 需要重新关联 | ❌ 临时违规 | 5-15分钟 |
+
+#### 🔧 **建议的更新流程**
+```
+1. 获取现有策略详情
    ↓
-2. 生成新策略ID
+2. 提取PolicyId和PolicyUpdateToken
    ↓
-3. 保留现有防火墙实例
+3. 修改策略配置（保留PolicyId）
    ↓
-4. 重新评估资源范围
+4. 执行put-policy更新
    ↓
-5. 关联现有防火墙到新策略
+5. 策略ID保持不变
    ↓
-6. 同步配置变更（如有）
+6. 配置立即同步到防火墙
    ↓
-7. 更新合规状态为COMPLIANT
+7. 合规状态快速恢复为COMPLIANT
 ```
 
 ### 实际验证结果
 
-#### 📊 **策略更新前后对比**
+#### 📊 **更新策略示例**
 ```bash
-# 更新前 - 防火墙正常运行
-aws network-firewall describe-firewall \
-  --firewall-name "FMManagedNetworkFirewall...xxxxxxxx...vpc-xxx"
-# 状态: READY, ConfigurationSyncStateSummary: IN_SYNC
+# 1. 获取现有策略信息
+POLICY_DETAIL=$(aws fms get-policy --policy-id "existing-policy-id" --region ap-northeast-1)
+UPDATE_TOKEN=$(echo "$POLICY_DETAIL" | jq -r '.Policy.PolicyUpdateToken')
 
-# 策略更新 (put-policy)
-aws fms put-policy --policy file://updated-policy.json
-# 结果: 新策略ID生成
+# 2. 正确的策略更新（包含PolicyId和UpdateToken）
+aws fms put-policy --region ap-northeast-1 --policy '{
+  "PolicyId": "existing-policy-id",
+  "PolicyUpdateToken": "'$UPDATE_TOKEN'",
+  "PolicyName": "OrgWideNetworkFirewallPolicy",
+  ...其他配置
+}'
+# 结果: 策略ID保持不变，配置立即生效
 
-# 更新后 - 防火墙仍然运行
-aws network-firewall describe-firewall \
-  --firewall-name "FMManagedNetworkFirewall...xxxxxxxx...vpc-xxx"
-# 状态: 仍然是 READY, ConfigurationSyncStateSummary: IN_SYNC
-# 证明: 防火墙实例未被删除重建
+# 3. 验证更新结果
+aws fms get-policy --policy-id "existing-policy-id" --region ap-northeast-1
+# 策略ID未变，UpdateToken已更新
 ```
 
-#### ⏰ **重新评估时间线**
-| 时间点 | 策略状态 | 防火墙状态 | 合规状态 |
-|--------|----------|------------|----------|
-| **T+0** | 策略更新完成 | 防火墙正常运行 | 显示违规 |
-| **T+2分钟** | 新策略生效 | 防火墙正常运行 | 仍显示违规 |
-| **T+5分钟** | 重新评估中 | 防火墙正常运行 | 开始重新关联 |
-| **T+10分钟** | 评估完成 | 防火墙正常运行 | 恢复合规 |
+#### ⏰ **更新效果对比**
+| 更新方式 | T+0 | T+2分钟 | T+5分钟 | T+10分钟 |
+|----------|-----|---------|---------|----------|
+| **更新策略** | 配置生效 | 合规恢复 | 稳定运行 | 稳定运行 |
+| **新建策略** | 策略冲突 | 仍显示违规 | 开始重新关联 | 可能恢复合规 |
+
+### 策略更新的关键要求
+
+#### 🔧 **必需参数**
+```json
+{
+  "PolicyId": "现有策略的ID",           // 必须包含
+  "PolicyUpdateToken": "当前的token",   // 必须包含
+  "PolicyName": "策略名称",
+  ...其他配置
+}
+```
+
+#### ⚠️ **常见错误**
+1. **忘记包含PolicyId**：导致创建新策略而非更新
+2. **使用过期的UpdateToken**：导致更新失败
+3. **直接使用策略文件**：文件中通常不包含PolicyId
 
 ### DeleteUnusedFMManagedResources 参数
 
@@ -270,9 +324,9 @@ aws network-firewall describe-firewall \
 | **true** | 删除不再被策略管理的资源 | 清理环境 |
 
 #### ⚠️ **重要说明**
-- **策略更新不会触发资源删除**：即使设置为 `true`，策略更新也不会删除现有防火墙
+- **策略更新不会触发资源删除**：策略ID不变，防火墙继续被管理
+- **新建策略可能导致资源孤立**：新策略无法识别旧策略创建的防火墙
 - **只有策略删除才会触发清理**：使用 `delete-policy` 时才会根据此参数决定是否清理资源
-- **建议生产环境设置为 `false`**：避免意外删除重要的安全资源
 
 ### 最佳实践建议
 
@@ -282,39 +336,74 @@ aws network-firewall describe-firewall \
    aws fms get-policy --policy-id current-policy-id > backup-policy.json
    ```
 
-2. **记录现有防火墙实例**
+2. **记录策略ID和UpdateToken**
    ```bash
-   aws network-firewall list-firewalls > current-firewalls.json
+   POLICY_ID="current-policy-id"
+   UPDATE_TOKEN=$(aws fms get-policy --policy-id $POLICY_ID --query 'Policy.PolicyUpdateToken' --output text)
    ```
 
 3. **检查当前合规状态**
    ```bash
-   aws fms list-compliance-status --policy-id current-policy-id
+   aws fms list-compliance-status --policy-id $POLICY_ID
+   ```
+
+#### ✅ **策略更新操作**
+1. **使用正确的更新命令**
+   ```bash
+   # 方法1: 直接命令行更新
+   aws fms put-policy --policy '{
+     "PolicyId": "'$POLICY_ID'",
+     "PolicyUpdateToken": "'$UPDATE_TOKEN'",
+     ...配置
+   }'
+   
+   # 方法2: 使用临时文件
+   jq --arg policy_id "$POLICY_ID" --arg update_token "$UPDATE_TOKEN" \
+     '. + {PolicyId: $policy_id, PolicyUpdateToken: $update_token}' \
+     policy-template.json > temp-policy.json
+   aws fms put-policy --policy file://temp-policy.json
+   rm temp-policy.json
    ```
 
 #### ✅ **策略更新后**
-1. **等待重新评估完成**（5-15分钟）
-2. **验证防火墙实例状态**
+1. **立即验证策略状态**
+   ```bash
+   aws fms get-policy --policy-id $POLICY_ID
+   ```
+
+2. **检查合规状态**（通常1-2分钟内恢复）
+   ```bash
+   aws fms list-compliance-status --policy-id $POLICY_ID
+   ```
+
+3. **验证防火墙配置同步**
    ```bash
    aws network-firewall describe-firewall --firewall-name firewall-name
    ```
 
-3. **确认合规状态恢复**
-   ```bash
-   aws fms list-compliance-status --policy-id new-policy-id
-   ```
-
-4. **测试网络连通性**
-   ```bash
-   # 验证防火墙规则仍然生效
-   curl -m 5 http://target-server:80
-   ```
-
 #### ⚠️ **注意事项**
-- **临时违规状态是正常现象**：不要在重新评估期间进行额外操作
-- **避免频繁更新策略**：给系统足够时间完成重新评估
-- **监控防火墙日志**：确保安全规则持续生效
-- **保持网络配置稳定**：策略更新期间避免修改网络拓扑
+- **每次更新前都要获取最新的UpdateToken**：token在每次更新后都会变化
+- **避免并发更新**：同时进行多个更新可能导致冲突
+- **监控更新结果**：确认策略ID未变化，配置已生效
+- **测试配置变更**：验证防火墙规则按预期工作
+
+#### 🚨 **故障排除**
+1. **如果意外创建了重复策略**：
+   ```bash
+   # 列出所有策略
+   aws fms list-policies
+   
+   # 删除多余的策略
+   aws fms delete-policy --policy-id duplicate-policy-id
+   ```
+
+2. **如果更新失败**：
+   ```bash
+   # 检查错误信息
+   aws fms get-policy --policy-id $POLICY_ID
+   
+   # 重新获取UpdateToken后重试
+   ```
 
 ## 🔄 **日常管理操作**
 

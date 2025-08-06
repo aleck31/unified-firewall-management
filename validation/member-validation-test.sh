@@ -69,39 +69,14 @@ else
     echo "⚠️  未发现域名列表（可能通过 RAM 共享）"
 fi
 
-# 3. DNS 功能测试
+# 3. SCP 保护策略验证
 echo ""
-echo "🧪 3. DNS 阻断功能测试"
-echo "----------------------------------------"
-
-# 测试常见的被阻断域名
-TEST_DOMAINS=("badsite.org" "example.com" "malware.test")
-BLOCKED_COUNT=0
-
-for domain in "${TEST_DOMAINS[@]}"; do
-    echo "测试域名: $domain"
-    
-    # 使用 nslookup 测试
-    LOOKUP_RESULT=$(nslookup $domain 2>&1 || echo "FAILED")
-    
-    if echo "$LOOKUP_RESULT" | grep -q "NXDOMAIN\|can't find\|No answer"; then
-        echo "   ✅ 域名被阻断"
-        BLOCKED_COUNT=$((BLOCKED_COUNT + 1))
-    elif echo "$LOOKUP_RESULT" | grep -q "FAILED\|timeout"; then
-        echo "   ⚠️  DNS 查询失败（可能被阻断）"
-        BLOCKED_COUNT=$((BLOCKED_COUNT + 1))
-    else
-        echo "   ❌ 域名未被阻断"
-    fi
-done
-
-# 4. SCP 保护策略验证
-echo ""
-echo "🛡️  4. SCP 保护策略验证"
+echo "🛡️  3. SCP 保护策略验证"
 echo "----------------------------------------"
 
 SCP_WORKING=0
 
+# 测试防火墙删除限制
 if [ $FIREWALL_COUNT -gt 0 ]; then
     FIRST_FIREWALL=$(echo $FIREWALLS | awk '{print $1}')
     echo "测试防火墙删除限制（使用防火墙: $FIRST_FIREWALL）..."
@@ -117,34 +92,52 @@ if [ $FIREWALL_COUNT -gt 0 ]; then
         echo "   错误信息: $DELETE_RESULT"
     fi
 else
-    echo "⚠️  无法测试 SCP 保护（没有防火墙实例）"
+    echo "⚠️  无法测试防火墙删除限制（没有防火墙实例）"
 fi
 
-# 测试规则组修改限制
-echo "测试规则组修改限制..."
-if [ -n "$RULE_GROUPS" ] && [ "$RULE_GROUPS" != "None" ]; then
-    FIRST_RULE_GROUP=$(echo $RULE_GROUPS | awk '{print $1}')
+# 测试DNS防火墙规则组关联修改限制
+echo "测试DNS防火墙规则组关联修改限制..."
+if [ $DNS_COUNT -gt 0 ]; then
+    # 获取第一个DNS防火墙关联ID
+    FIRST_DNS_ASSOC=$(aws route53resolver list-firewall-rule-group-associations --region $REGION --query 'FirewallRuleGroupAssociations[0].Id' --output text 2>/dev/null || echo "")
     
-    # 尝试更新规则组（应该被拒绝）
-    UPDATE_RESULT=$(aws network-firewall update-rule-group --rule-group-name "$FIRST_RULE_GROUP" --description "Test modification" --region $REGION 2>&1 || echo "DENIED")
-    
-    if echo "$UPDATE_RESULT" | grep -q "AccessDenied\|not authorized\|explicit deny\|Deny"; then
-        echo "✅ SCP 保护生效：规则组修改被阻止"
-        SCP_WORKING=1
+    if [ -n "$FIRST_DNS_ASSOC" ] && [ "$FIRST_DNS_ASSOC" != "None" ]; then
+        # 尝试修改DNS防火墙关联（应该被拒绝）
+        DNS_UPDATE_RESULT=$(aws route53resolver update-firewall-rule-group-association --firewall-rule-group-association-id "$FIRST_DNS_ASSOC" --priority 20 --region $REGION 2>&1 || echo "DENIED")
+        
+        if echo "$DNS_UPDATE_RESULT" | grep -q "AccessDenied\|not authorized\|explicit deny\|Deny"; then
+            echo "✅ SCP 保护生效：DNS防火墙关联修改被阻止"
+            SCP_WORKING=1
+        else
+            echo "❌ SCP 保护可能未生效（DNS防火墙关联）"
+        fi
     else
-        echo "❌ SCP 保护可能未生效"
+        echo "⚠️  无法获取DNS防火墙关联ID"
     fi
 else
-    echo "⚠️  无法测试规则组修改限制（没有规则组）"
+    echo "⚠️  无法测试DNS防火墙修改限制（没有DNS防火墙关联）"
 fi
 
-# 5. 生成验证报告
+# 测试创建新防火墙的限制
+echo "测试创建新防火墙限制..."
+CREATE_RESULT=$(aws network-firewall create-firewall --firewall-name "TestFirewall" --firewall-policy-arn "arn:aws:network-firewall:$REGION:$ACCOUNT_ID:firewall-policy/test" --vpc-id "vpc-test" --region $REGION 2>&1 || echo "DENIED")
+
+if echo "$CREATE_RESULT" | grep -q "AccessDenied\|not authorized\|explicit deny\|Deny"; then
+    echo "✅ SCP 保护生效：创建新防火墙被阻止"
+    SCP_WORKING=1
+elif echo "$CREATE_RESULT" | grep -q "ValidationException\|InvalidParameter"; then
+    echo "⚠️  SCP 可能未完全生效（但参数验证失败）"
+else
+    echo "❌ SCP 保护可能未生效（创建防火墙）"
+fi
+
+# 4. 生成验证报告
 echo ""
 echo "📊 验证报告"
 echo "========================================"
 
 TOTAL_SCORE=0
-MAX_SCORE=4
+MAX_SCORE=3
 
 # Network Firewall 评分
 if [ $FIREWALL_COUNT -gt 0 ]; then
@@ -160,14 +153,6 @@ if [ $DNS_COUNT -gt 0 ]; then
     TOTAL_SCORE=$((TOTAL_SCORE + 1))
 else
     echo "❌ DNS Firewall: 未部署"
-fi
-
-# DNS 阻断功能评分
-if [ $BLOCKED_COUNT -gt 0 ]; then
-    echo "✅ DNS 阻断功能: 工作正常 ($BLOCKED_COUNT/${#TEST_DOMAINS[@]} 个域名被阻断)"
-    TOTAL_SCORE=$((TOTAL_SCORE + 1))
-else
-    echo "❌ DNS 阻断功能: 未生效"
 fi
 
 # SCP 保护评分

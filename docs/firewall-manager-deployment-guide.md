@@ -192,7 +192,7 @@ sed -i "s|rslvr-frg-xxxxxxxxxx|$RULE_GROUP_ID|g" policies/dns-firewall-policy.js
   "PolicyName": "OrgWideNetworkFirewallPolicy",
   "SecurityServicePolicyData": {
     "Type": "NETWORK_FIREWALL",
-    "ManagedServiceData": "{\"type\":\"NETWORK_FIREWALL\",\"networkFirewallStatelessRuleGroupReferences\":[{\"resourceArn\":\"arn:aws:network-firewall:ap-northeast-1:account:stateless-rulegroup/OrgWideStatelessRules\",\"priority\":100}],\"networkFirewallStatefulRuleGroupReferences\":[{\"resourceArn\":\"arn:aws:network-firewall:ap-northeast-1:account:stateful-rulegroup/OrgWideStatefulRules\"}],\"networkFirewallStatelessDefaultActions\":[\"aws:forward_to_sfe\"],\"networkFirewallStatelessFragmentDefaultActions\":[\"aws:forward_to_sfe\"],\"networkFirewallOrchestrationConfig\":{\"singleFirewallEndpointPerVPC\":false,\"allowedIPV4CidrList\":[\"0.0.0.0/0\"]}}"
+    "ManagedServiceData": "{\"type\":\"NETWORK_FIREWALL\",\"networkFirewallStatelessRuleGroupReferences\":[{\"resourceArn\":\"arn:aws:network-firewall:ap-northeast-1:account:stateless-rulegroup/OrgWideStatelessRules\",\"priority\":100}],\"networkFirewallStatefulRuleGroupReferences\":[{\"resourceArn\":\"arn:aws:network-firewall:ap-northeast-1:account:stateful-rulegroup/OrgWideStatefulRules\"}],\"networkFirewallStatelessDefaultActions\":[\"aws:forward_to_sfe\"],\"networkFirewallStatelessFragmentDefaultActions\":[\"aws:forward_to_sfe\"],\"networkFirewallOrchestrationConfig\":{\"singleFirewallEndpointPerVPC\":true,\"allowedIPV4CidrList\":[\"10.0.0.0/28\",\"10.0.1.16/28\",\"10.0.2.16/28\",\"10.0.3.16/28\"],\"routeManagementAction\":\"MONITOR\",\"routeManagementTargetTypes\":[\"InternetGateway\"]}}"
   },
   "ResourceType": "AWS::EC2::VPC",
   "IncludeMap": {
@@ -202,6 +202,35 @@ sed -i "s|rslvr-frg-xxxxxxxxxx|$RULE_GROUP_ID|g" policies/dns-firewall-policy.js
   "RemediationEnabled": true,
   "DeleteUnusedFMManagedResources": false
 }
+```
+
+#### 🔧 **关键配置参数详解**
+
+| 参数 | 推荐值 | 作用说明 | 部署影响 |
+|------|--------|----------|----------|
+| **singleFirewallEndpointPerVPC** | `true` | 每VPC单防火墙端点 | 避免多AZ CIDR冲突 |
+| **routeManagementAction** | `"MONITOR"` | 启用路由监控 | 检测流量绕过 |
+| **routeManagementTargetTypes** | `["InternetGateway"]` | 监控IGW路由 | 确保流量经过防火墙 |
+| **allowedIPV4CidrList** | `["/28范围"]` | 防火墙子网CIDR | 避免与用户子网重叠 |
+
+#### ⚠️ **重要配置说明**
+
+**单端点模式 vs 多端点模式**：
+```json
+// 推荐：单端点模式（部署可靠）
+"singleFirewallEndpointPerVPC": true
+
+// 不推荐：多端点模式（可能CIDR冲突）  
+"singleFirewallEndpointPerVPC": false
+```
+
+**路由管理选项**：
+```json
+// 推荐：启用监控
+"routeManagementAction": "MONITOR"
+
+// 不推荐：关闭监控
+"routeManagementAction": "OFF"
 ```
 
 #### DNS Firewall 策略

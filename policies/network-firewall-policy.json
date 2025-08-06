@@ -2,7 +2,7 @@
   "PolicyName": "OrgWideNetworkFirewallPolicy",
   "SecurityServicePolicyData": {
     "Type": "NETWORK_FIREWALL",
-    "ManagedServiceData": "{\"type\":\"NETWORK_FIREWALL\",\"networkFirewallStatelessRuleGroupReferences\":[{\"resourceARN\":\"STATELESS_ARN_PLACEHOLDER\",\"priority\":1}],\"networkFirewallStatefulRuleGroupReferences\":[{\"resourceARN\":\"STATEFUL_ARN_PLACEHOLDER\"}],\"networkFirewallStatelessDefaultActions\":[\"aws:forward_to_sfe\"],\"networkFirewallStatelessFragmentDefaultActions\":[\"aws:forward_to_sfe\"],\"networkFirewallOrchestrationConfig\":{\"singleFirewallEndpointPerVPC\":false,\"allowedIPV4CidrList\":[\"10.0.0.0/28\"],\"routeManagementAction\":\"OFF\"}}"
+    "ManagedServiceData": "{\"type\":\"NETWORK_FIREWALL\",\"networkFirewallStatelessRuleGroupReferences\":[{\"resourceARN\":\"STATELESS_ARN_PLACEHOLDER\",\"priority\":1}],\"networkFirewallStatefulRuleGroupReferences\":[{\"resourceARN\":\"STATEFUL_ARN_PLACEHOLDER\"}],\"networkFirewallStatelessDefaultActions\":[\"aws:forward_to_sfe\"],\"networkFirewallStatelessFragmentDefaultActions\":[\"aws:forward_to_sfe\"],\"networkFirewallOrchestrationConfig\":{\"singleFirewallEndpointPerVPC\":true,\"allowedIPV4CidrList\":[\"10.0.0.0/28\",\"10.0.1.16/28\",\"10.0.2.16/28\",\"10.0.3.16/28\"],\"routeManagementAction\":\"MONITOR\",\"routeManagementTargetTypes\":[\"InternetGateway\"]}}"
   },
   "ResourceType": "AWS::EC2::VPC",
   "IncludeMap": {
@@ -12,7 +12,7 @@
   "ResourceTags": [
     {
       "Key": "VpcType",
-      "Value": "default"
+      "Value": "exclude"
     }
   ],
   "RemediationEnabled": true,
